@@ -3,10 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserPlus, Mail, User, Lock, Stethoscope, Phone } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabaseClient";  // ✅ Supabase import
 
 const DoctorRegister = () => {
   const [formData, setFormData] = useState({
@@ -24,18 +24,23 @@ const DoctorRegister = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Generate unique ID
-    const doctorId = Date.now().toString();
-    
-    // Get existing doctors from localStorage
-    const doctors = JSON.parse(localStorage.getItem("doctors") || "[]");
-    
-    // Check if username or email already exists
-    const existingDoctor = doctors.find((doc: any) => 
-      doc.username === formData.username || doc.email === formData.email
-    );
+    // ✅ Check if doctor with same username/email already exists
+    const { data: existingDoctors, error: checkError } = await supabase
+      .from("doctors")
+      .select("*")
+      .or(`username.eq.${formData.username},email.eq.${formData.email}`);
 
-    if (existingDoctor) {
+    if (checkError) {
+      toast({
+        title: "Error",
+        description: "Failed to check existing doctors.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    if (existingDoctors && existingDoctors.length > 0) {
       toast({
         title: "Registration Failed",
         description: "Username or email already exists",
@@ -45,29 +50,35 @@ const DoctorRegister = () => {
       return;
     }
 
-    // Add new doctor with pending status
-    const newDoctor = {
-      id: doctorId,
-      ...formData,
-      status: "pending",
-      registrationDate: new Date().toISOString(),
-    };
+    // ✅ Insert new doctor in Supabase with pending status
+    const { error } = await supabase.from("doctors").insert([
+      {
+        ...formData,
+        status: "pending",
+        registration_date: new Date().toISOString(),
+      },
+    ]);
 
-    doctors.push(newDoctor);
-    localStorage.setItem("doctors", JSON.stringify(doctors));
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Registration failed. Please try again.",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Registration Successful",
+        description: "Your application has been submitted for admin approval.",
+        variant: "default",
+      });
+      navigate("/doctor-login");
+    }
 
-    toast({
-      title: "Registration Successful",
-      description: "Your application has been submitted for admin approval.",
-      variant: "default",
-    });
-
-    navigate("/doctor-login");
     setIsLoading(false);
   };
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   return (

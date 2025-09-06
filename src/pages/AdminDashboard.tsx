@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Shield, Users, UserCheck, Clock, Trash2, Eye, LogOut } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { supabase } from "@/lib/supabaseClient";  // ✅ Supabase import
+import { supabase } from "@/lib/supabaseClient";  // ✅ Supabase client import
 
 const AdminDashboard = () => {
   const [doctors, setDoctors] = useState<any[]>([]);
@@ -23,18 +23,18 @@ const AdminDashboard = () => {
     loadData();
   }, [navigate]);
 
-  // ✅ Load doctors + patients from Supabase
+  // ✅ Load doctors & patients from Supabase
   const loadData = async () => {
     const { data: doctorData, error: doctorError } = await supabase.from("doctors").select("*");
     if (doctorError) {
-      toast({ title: "Error", description: "Failed to load doctors", variant: "destructive" });
+      toast({ title: "Error", description: doctorError.message, variant: "destructive" });
     } else {
       setDoctors(doctorData || []);
     }
 
     const { data: patientData, error: patientError } = await supabase.from("patients").select("*");
     if (patientError) {
-      toast({ title: "Error", description: "Failed to load patients", variant: "destructive" });
+      toast({ title: "Error", description: patientError.message, variant: "destructive" });
     } else {
       setPatients(patientData || []);
     }
@@ -48,32 +48,32 @@ const AdminDashboard = () => {
       .eq("id", doctorId);
 
     if (error) {
-      toast({ title: "Error", description: "Failed to approve doctor", variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Doctor Approved", description: "Doctor can now access the system" });
       loadData();
     }
   };
 
-  // ✅ Reject doctor (delete request)
+  // ✅ Reject doctor (delete)
   const handleRejectDoctor = async (doctorId: string) => {
     const { error } = await supabase.from("doctors").delete().eq("id", doctorId);
 
     if (error) {
-      toast({ title: "Error", description: "Failed to reject doctor", variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Doctor Rejected", description: "Registration request deleted", variant: "destructive" });
+      toast({ title: "Doctor Rejected", description: "Registration request removed", variant: "destructive" });
       loadData();
     }
   };
 
-  // ✅ Delete doctor + their patients
+  // ✅ Delete doctor & their patients
   const handleDeleteDoctor = async (doctorId: string) => {
-    const { error: patientError } = await supabase.from("patients").delete().eq("doctor_id", doctorId);
-    const { error: doctorError } = await supabase.from("doctors").delete().eq("id", doctorId);
+    await supabase.from("patients").delete().eq("doctor_id", doctorId);
+    const { error } = await supabase.from("doctors").delete().eq("id", doctorId);
 
-    if (doctorError || patientError) {
-      toast({ title: "Error", description: "Failed to delete doctor", variant: "destructive" });
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Doctor Deleted", description: "Doctor and their patients removed", variant: "destructive" });
       loadData();

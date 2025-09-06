@@ -16,16 +16,21 @@ const AdminLogin = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Hardcoded admin credentials
-    if (credentials.username === "admin" && credentials.password === "admin123") {
+    // ✅ Hardcoded admin credentials
+    if (
+      credentials.username.trim() === "admin" &&
+      credentials.password.trim() === "admin123"
+    ) {
+      // Save session in localStorage
       localStorage.setItem("userRole", "admin");
       localStorage.setItem("userId", "admin");
+
       toast({
         title: "Login Successful",
         description: "Welcome to the Admin Panel",
-        variant: "default",
       });
-      navigate("/admin");
+
+      navigate("/admin"); // redirect to admin dashboard
     } else {
       toast({
         title: "Login Failed",
@@ -51,6 +56,7 @@ const AdminLogin = () => {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
+            {/* Username */}
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
               <div className="relative">
@@ -60,13 +66,16 @@ const AdminLogin = () => {
                   type="text"
                   placeholder="Enter username"
                   value={credentials.username}
-                  onChange={(e) => setCredentials(prev => ({ ...prev, username: e.target.value }))}
+                  onChange={(e) =>
+                    setCredentials((prev) => ({ ...prev, username: e.target.value }))
+                  }
                   className="pl-10"
                   required
                 />
               </div>
             </div>
-            
+
+            {/* Password */}
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
@@ -76,15 +85,18 @@ const AdminLogin = () => {
                   type="password"
                   placeholder="Enter password"
                   value={credentials.password}
-                  onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
+                  onChange={(e) =>
+                    setCredentials((prev) => ({ ...prev, password: e.target.value }))
+                  }
                   className="pl-10"
                   required
                 />
               </div>
             </div>
 
-            <Button 
-              type="submit" 
+            {/* Login Button */}
+            <Button
+              type="submit"
               className="w-full bg-primary hover:bg-primary-hover"
               disabled={isLoading}
             >
@@ -92,9 +104,10 @@ const AdminLogin = () => {
             </Button>
           </form>
 
+          {/* Back Button */}
           <div className="mt-6 text-center">
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               onClick={() => navigate("/")}
               className="text-muted-foreground hover:text-primary"
             >

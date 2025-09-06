@@ -7,13 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Stethoscope, Users, Plus, Edit, Trash2, LogOut, User, Phone, Calendar, FileText } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabaseClient";  // ✅ Supabase client
 
 const DoctorDashboard = () => {
   const [patients, setPatients] = useState<any[]>([]);
   const [doctorName, setDoctorName] = useState("");
+  const [doctorId, setDoctorId] = useState<string | null>(null);
   const [isAddingPatient, setIsAddingPatient] = useState(false);
   const [editingPatient, setEditingPatient] = useState<any>(null);
   const [patientForm, setPatientForm] = useState({
@@ -28,23 +29,34 @@ const DoctorDashboard = () => {
   });
   const navigate = useNavigate();
 
+  // ✅ Load doctor info & patients from Supabase
   useEffect(() => {
-    // Check if user is doctor
-    if (localStorage.getItem("userRole") !== "doctor") {
+    const role = localStorage.getItem("userRole");
+    if (role !== "doctor") {
       navigate("/");
       return;
     }
 
+    const id = localStorage.getItem("userId");
     const name = localStorage.getItem("doctorName") || "Doctor";
+    setDoctorId(id);
     setDoctorName(name);
-    loadPatients();
+
+    if (id) loadPatients(id);
   }, [navigate]);
 
-  const loadPatients = () => {
-    const doctorId = localStorage.getItem("userId");
-    const allPatients = JSON.parse(localStorage.getItem("patients") || "[]");
-    const doctorPatients = allPatients.filter((p: any) => p.doctorId === doctorId);
-    setPatients(doctorPatients);
+  // ✅ Fetch patients from Supabase
+  const loadPatients = async (id: string) => {
+    const { data, error } = await supabase
+      .from("patients")
+      .select("*")
+      .eq("doctor_id", id);
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load patients.", variant: "destructive" });
+    } else {
+      setPatients(data || []);
+    }
   };
 
   const resetForm = () => {
@@ -61,61 +73,56 @@ const DoctorDashboard = () => {
     setEditingPatient(null);
   };
 
-  const handleAddPatient = () => {
-    const doctorId = localStorage.getItem("userId");
-    const patientId = Date.now().toString();
-    
-    const newPatient = {
-      id: patientId,
-      doctorId,
-      ...patientForm,
-      createdDate: new Date().toISOString(),
-    };
+  // ✅ Add new patient
+  const handleAddPatient = async () => {
+    if (!doctorId) return;
 
-    const allPatients = JSON.parse(localStorage.getItem("patients") || "[]");
-    allPatients.push(newPatient);
-    localStorage.setItem("patients", JSON.stringify(allPatients));
-    
-    setPatients(prev => [...prev, newPatient]);
-    resetForm();
-    setIsAddingPatient(false);
-    
-    toast({
-      title: "Patient Added",
-      description: "Patient record has been created successfully",
-      variant: "default",
-    });
+    const { error } = await supabase.from("patients").insert([
+      {
+        doctor_id: doctorId,
+        ...patientForm,
+        created_date: new Date().toISOString(),
+      },
+    ]);
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to add patient.", variant: "destructive" });
+    } else {
+      toast({ title: "Patient Added", description: "Patient record created successfully" });
+      loadPatients(doctorId);
+      resetForm();
+      setIsAddingPatient(false);
+    }
   };
 
-  const handleEditPatient = () => {
-    const allPatients = JSON.parse(localStorage.getItem("patients") || "[]");
-    const updatedPatients = allPatients.map((p: any) => 
-      p.id === editingPatient.id ? { ...p, ...patientForm } : p
-    );
-    
-    localStorage.setItem("patients", JSON.stringify(updatedPatients));
-    loadPatients();
-    resetForm();
-    
-    toast({
-      title: "Patient Updated",
-      description: "Patient record has been updated successfully",
-      variant: "default",
-    });
+  // ✅ Update patient
+  const handleEditPatient = async () => {
+    if (!editingPatient) return;
+
+    const { error } = await supabase
+      .from("patients")
+      .update({ ...patientForm })
+      .eq("id", editingPatient.id);
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to update patient.", variant: "destructive" });
+    } else {
+      toast({ title: "Patient Updated", description: "Record updated successfully" });
+      if (doctorId) loadPatients(doctorId);
+      resetForm();
+    }
   };
 
-  const handleDeletePatient = (patientId: string) => {
-    const allPatients = JSON.parse(localStorage.getItem("patients") || "[]");
-    const updatedPatients = allPatients.filter((p: any) => p.id !== patientId);
-    
-    localStorage.setItem("patients", JSON.stringify(updatedPatients));
-    setPatients(prev => prev.filter(p => p.id !== patientId));
-    
-    toast({
-      title: "Patient Deleted",
-      description: "Patient record has been removed",
-      variant: "destructive",
-    });
+  // ✅ Delete patient
+  const handleDeletePatient = async (patientId: string) => {
+    const { error } = await supabase.from("patients").delete().eq("id", patientId);
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to delete patient.", variant: "destructive" });
+    } else {
+      setPatients(prev => prev.filter(p => p.id !== patientId));
+      toast({ title: "Patient Deleted", description: "Record has been removed", variant: "destructive" });
+    }
   };
 
   const openEditDialog = (patient: any) => {
@@ -133,9 +140,7 @@ const DoctorDashboard = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("userRole");
-    localStorage.removeItem("userId");
-    localStorage.removeItem("doctorName");
+    localStorage.clear();
     navigate("/");
   };
 
@@ -159,7 +164,7 @@ const DoctorDashboard = () => {
           </Button>
         </div>
 
-        {/* Stats Card */}
+        {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card>
             <CardContent className="p-6">
@@ -172,7 +177,7 @@ const DoctorDashboard = () => {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -180,7 +185,7 @@ const DoctorDashboard = () => {
                   <p className="text-sm text-muted-foreground">Recent Patients</p>
                   <p className="text-2xl font-bold text-primary">
                     {patients.filter(p => {
-                      const createdDate = new Date(p.createdDate);
+                      const createdDate = new Date(p.created_date);
                       const weekAgo = new Date();
                       weekAgo.setDate(weekAgo.getDate() - 7);
                       return createdDate > weekAgo;
@@ -191,7 +196,7 @@ const DoctorDashboard = () => {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardContent className="p-6 flex items-center justify-center">
               <Dialog open={isAddingPatient} onOpenChange={setIsAddingPatient}>
@@ -204,41 +209,24 @@ const DoctorDashboard = () => {
                 <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Add New Patient</DialogTitle>
-                    <DialogDescription>
-                      Enter patient information to create a new medical record
-                    </DialogDescription>
+                    <DialogDescription>Enter patient details</DialogDescription>
                   </DialogHeader>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
                     <div className="space-y-2">
                       <Label htmlFor="name">Full Name</Label>
-                      <Input
-                        id="name"
-                        value={patientForm.name}
-                        onChange={(e) => setPatientForm(prev => ({ ...prev, name: e.target.value }))}
-                        placeholder="Patient full name"
-                      />
+                      <Input id="name" value={patientForm.name}
+                        onChange={(e) => setPatientForm(prev => ({ ...prev, name: e.target.value }))} />
                     </div>
-                    
                     <div className="space-y-2">
                       <Label htmlFor="age">Age</Label>
-                      <Input
-                        id="age"
-                        type="number"
-                        value={patientForm.age}
-                        onChange={(e) => setPatientForm(prev => ({ ...prev, age: e.target.value }))}
-                        placeholder="Patient age"
-                      />
+                      <Input id="age" type="number" value={patientForm.age}
+                        onChange={(e) => setPatientForm(prev => ({ ...prev, age: e.target.value }))} />
                     </div>
-                    
                     <div className="space-y-2">
                       <Label htmlFor="gender">Gender</Label>
-                      <Select
-                        value={patientForm.gender}
-                        onValueChange={(value) => setPatientForm(prev => ({ ...prev, gender: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select gender" />
-                        </SelectTrigger>
+                      <Select value={patientForm.gender}
+                        onValueChange={(value) => setPatientForm(prev => ({ ...prev, gender: value }))}>
+                        <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Male">Male</SelectItem>
                           <SelectItem value="Female">Female</SelectItem>
@@ -246,75 +234,35 @@ const DoctorDashboard = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                    
                     <div className="space-y-2">
-                      <Label htmlFor="contact">Contact Number</Label>
-                      <Input
-                        id="contact"
-                        value={patientForm.contact}
-                        onChange={(e) => setPatientForm(prev => ({ ...prev, contact: e.target.value }))}
-                        placeholder="Phone number"
-                      />
+                      <Label htmlFor="contact">Contact</Label>
+                      <Input id="contact" value={patientForm.contact}
+                        onChange={(e) => setPatientForm(prev => ({ ...prev, contact: e.target.value }))} />
                     </div>
-                    
                     <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="medicalHistory">Medical History</Label>
-                      <Textarea
-                        id="medicalHistory"
-                        value={patientForm.medicalHistory}
-                        onChange={(e) => setPatientForm(prev => ({ ...prev, medicalHistory: e.target.value }))}
-                        placeholder="Previous medical conditions, allergies, surgeries..."
-                        rows={3}
-                      />
+                      <Label>Medical History</Label>
+                      <Textarea value={patientForm.medicalHistory}
+                        onChange={(e) => setPatientForm(prev => ({ ...prev, medicalHistory: e.target.value }))} />
                     </div>
-                    
                     <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="diagnosis">Current Diagnosis</Label>
-                      <Textarea
-                        id="diagnosis"
-                        value={patientForm.diagnosis}
-                        onChange={(e) => setPatientForm(prev => ({ ...prev, diagnosis: e.target.value }))}
-                        placeholder="Current medical diagnosis"
-                        rows={2}
-                      />
+                      <Label>Diagnosis</Label>
+                      <Textarea value={patientForm.diagnosis}
+                        onChange={(e) => setPatientForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
                     </div>
-                    
                     <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="treatment">Treatment Plan</Label>
-                      <Textarea
-                        id="treatment"
-                        value={patientForm.treatment}
-                        onChange={(e) => setPatientForm(prev => ({ ...prev, treatment: e.target.value }))}
-                        placeholder="Recommended treatment and procedures"
-                        rows={2}
-                      />
+                      <Label>Treatment</Label>
+                      <Textarea value={patientForm.treatment}
+                        onChange={(e) => setPatientForm(prev => ({ ...prev, treatment: e.target.value }))} />
                     </div>
-                    
                     <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="prescriptions">Prescriptions</Label>
-                      <Textarea
-                        id="prescriptions"
-                        value={patientForm.prescriptions}
-                        onChange={(e) => setPatientForm(prev => ({ ...prev, prescriptions: e.target.value }))}
-                        placeholder="Medications and dosage instructions"
-                        rows={2}
-                      />
+                      <Label>Prescriptions</Label>
+                      <Textarea value={patientForm.prescriptions}
+                        onChange={(e) => setPatientForm(prev => ({ ...prev, prescriptions: e.target.value }))} />
                     </div>
                   </div>
-                  
                   <div className="flex justify-end space-x-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        resetForm();
-                        setIsAddingPatient(false);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button onClick={handleAddPatient} className="bg-success hover:bg-success/90">
-                      Add Patient
-                    </Button>
+                    <Button variant="outline" onClick={() => { resetForm(); setIsAddingPatient(false); }}>Cancel</Button>
+                    <Button onClick={handleAddPatient} className="bg-success hover:bg-success/90">Add Patient</Button>
                   </div>
                 </DialogContent>
               </Dialog>
@@ -329,7 +277,7 @@ const DoctorDashboard = () => {
               <Users className="w-5 h-5" />
               <span>My Patients</span>
             </CardTitle>
-            <CardDescription>Manage your patient records and medical information</CardDescription>
+            <CardDescription>Manage your patient records</CardDescription>
           </CardHeader>
           <CardContent>
             {patients.length === 0 ? (
@@ -338,8 +286,7 @@ const DoctorDashboard = () => {
                 <p className="text-lg font-medium text-muted-foreground">No patients yet</p>
                 <p className="text-sm text-muted-foreground mb-4">Start by adding your first patient</p>
                 <Button onClick={() => setIsAddingPatient(true)} className="bg-secondary hover:bg-secondary-hover">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Patient
+                  <Plus className="w-4 h-4 mr-2" /> Add Patient
                 </Button>
               </div>
             ) : (
@@ -358,23 +305,14 @@ const DoctorDashboard = () => {
                           </div>
                         </div>
                         <div className="flex space-x-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openEditDialog(patient)}
-                          >
+                          <Button size="sm" variant="outline" onClick={() => openEditDialog(patient)}>
                             <Edit className="w-4 h-4" />
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleDeletePatient(patient.id)}
-                          >
+                          <Button size="sm" variant="destructive" onClick={() => handleDeletePatient(patient.id)}>
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
                       </div>
-                      
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <div className="flex items-center space-x-2 text-sm">
@@ -389,16 +327,8 @@ const DoctorDashboard = () => {
                           )}
                         </div>
                         <div className="space-y-2">
-                          {patient.treatment && (
-                            <div className="text-sm">
-                              <strong>Treatment:</strong> {patient.treatment}
-                            </div>
-                          )}
-                          {patient.prescriptions && (
-                            <div className="text-sm">
-                              <strong>Prescriptions:</strong> {patient.prescriptions}
-                            </div>
-                          )}
+                          {patient.treatment && <div className="text-sm"><strong>Treatment:</strong> {patient.treatment}</div>}
+                          {patient.prescriptions && <div className="text-sm"><strong>Prescriptions:</strong> {patient.prescriptions}</div>}
                         </div>
                       </div>
                     </CardContent>
@@ -414,104 +344,28 @@ const DoctorDashboard = () => {
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Patient Record</DialogTitle>
-              <DialogDescription>
-                Update patient information and medical records
-              </DialogDescription>
+              <DialogDescription>Update patient details</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Full Name</Label>
-                <Input
-                  id="edit-name"
-                  value={patientForm.name}
-                  onChange={(e) => setPatientForm(prev => ({ ...prev, name: e.target.value }))}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="edit-age">Age</Label>
-                <Input
-                  id="edit-age"
-                  type="number"
-                  value={patientForm.age}
-                  onChange={(e) => setPatientForm(prev => ({ ...prev, age: e.target.value }))}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="edit-gender">Gender</Label>
-                <Select
-                  value={patientForm.gender}
-                  onValueChange={(value) => setPatientForm(prev => ({ ...prev, gender: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Male">Male</SelectItem>
-                    <SelectItem value="Female">Female</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="edit-contact">Contact</Label>
-                <Input
-                  id="edit-contact"
-                  value={patientForm.contact}
-                  onChange={(e) => setPatientForm(prev => ({ ...prev, contact: e.target.value }))}
-                />
-              </div>
-              
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="edit-medicalHistory">Medical History</Label>
-                <Textarea
-                  id="edit-medicalHistory"
-                  value={patientForm.medicalHistory}
-                  onChange={(e) => setPatientForm(prev => ({ ...prev, medicalHistory: e.target.value }))}
-                  rows={3}
-                />
-              </div>
-              
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="edit-diagnosis">Diagnosis</Label>
-                <Textarea
-                  id="edit-diagnosis"
-                  value={patientForm.diagnosis}
-                  onChange={(e) => setPatientForm(prev => ({ ...prev, diagnosis: e.target.value }))}
-                  rows={2}
-                />
-              </div>
-              
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="edit-treatment">Treatment</Label>
-                <Textarea
-                  id="edit-treatment"
-                  value={patientForm.treatment}
-                  onChange={(e) => setPatientForm(prev => ({ ...prev, treatment: e.target.value }))}
-                  rows={2}
-                />
-              </div>
-              
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="edit-prescriptions">Prescriptions</Label>
-                <Textarea
-                  id="edit-prescriptions"
-                  value={patientForm.prescriptions}
-                  onChange={(e) => setPatientForm(prev => ({ ...prev, prescriptions: e.target.value }))}
-                  rows={2}
-                />
-              </div>
+              <Input id="edit-name" value={patientForm.name} onChange={(e) => setPatientForm(prev => ({ ...prev, name: e.target.value }))} />
+              <Input id="edit-age" type="number" value={patientForm.age} onChange={(e) => setPatientForm(prev => ({ ...prev, age: e.target.value }))} />
+              <Select value={patientForm.gender} onValueChange={(value) => setPatientForm(prev => ({ ...prev, gender: value }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Male">Male</SelectItem>
+                  <SelectItem value="Female">Female</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input id="edit-contact" value={patientForm.contact} onChange={(e) => setPatientForm(prev => ({ ...prev, contact: e.target.value }))} />
+              <Textarea value={patientForm.medicalHistory} onChange={(e) => setPatientForm(prev => ({ ...prev, medicalHistory: e.target.value }))} />
+              <Textarea value={patientForm.diagnosis} onChange={(e) => setPatientForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
+              <Textarea value={patientForm.treatment} onChange={(e) => setPatientForm(prev => ({ ...prev, treatment: e.target.value }))} />
+              <Textarea value={patientForm.prescriptions} onChange={(e) => setPatientForm(prev => ({ ...prev, prescriptions: e.target.value }))} />
             </div>
-            
             <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => setEditingPatient(null)}>
-                Cancel
-              </Button>
-              <Button onClick={handleEditPatient} className="bg-secondary hover:bg-secondary-hover">
-                Update Patient
-              </Button>
+              <Button variant="outline" onClick={() => setEditingPatient(null)}>Cancel</Button>
+              <Button onClick={handleEditPatient} className="bg-secondary hover:bg-secondary-hover">Update Patient</Button>
             </div>
           </DialogContent>
         </Dialog>

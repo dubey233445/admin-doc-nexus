@@ -43,10 +43,10 @@ const Index = () => {
   ];
 
   const stats = [
-    { number: "0", label: "Patients Managed", icon: <Users className="w-6 h-6" /> },
-    { number: "0", label: "Healthcare Professionals", icon: <Stethoscope className="w-6 h-6" /> },
-    { number: "0", label: "System Availability", icon: <Clock className="w-6 h-6" /> },
-    { number: "0", label: "Data Security", icon: <Shield className="w-6 h-6" /> }
+    { number: "5+", label: "Patients Managed", icon: <Users className="w-6 h-6" /> },
+    { number: "2+", label: "Healthcare Professionals", icon: <Stethoscope className="w-6 h-6" /> },
+    { number: "4+", label: "System Availability", icon: <Clock className="w-6 h-6" /> },
+    { number: "3+", label: "Data Security", icon: <Shield className="w-6 h-6" /> }
   ];
 
   return (
